@@ -313,7 +313,7 @@ define(["constants"], function (constants) {
   };
 
   // Get all the shares that a party have shared
-  var getShares = function (jiff_instance, partyID, ordering) {
+  var getShares = async function (jiff_instance, partyID, ordering, server_mailbox_hook) {
     var result = {
       shares: [],
       squares: [],
@@ -323,6 +323,9 @@ define(["constants"], function (constants) {
     };
 
     //find number of lin_reg_product pairs
+    if (server_mailbox_hook != null) {
+      await server_mailbox_hook(partyID);
+    }
 
     //loop through all the tables and count the number of lin_reg pairs
     var visited = {}; //keep track of which tables have already been counted
@@ -343,6 +346,8 @@ define(["constants"], function (constants) {
     for (question of ordering.questions) {
       question_length += question.items.length;
     }
+
+    jiff_instance.start_barrier();
 
     for (
       var k = 0;
@@ -368,6 +373,10 @@ define(["constants"], function (constants) {
         result.usability.push(share);
       }
     }
+
+    await jiff_instance.end_barrier();
+    console.log("Received shares for ", partyID);
+
     return result;
   };
 
@@ -473,7 +482,8 @@ define(["constants"], function (constants) {
     submitters,
     ordering,
     table_template,
-    progressBar
+    progressBar,
+    server_mailbox_hook
   ) {
     updateProgress(progressBar, 0);
 
@@ -534,7 +544,7 @@ define(["constants"], function (constants) {
 
       newShares[partyID] = [];
 
-      shares = getShares(jiff_instance, partyID, ordering);
+      shares = await getShares(jiff_instance, partyID, ordering, server_mailbox_hook);
 
       // var j = 0;
       // for (i = 1; i < 40; i++) {
@@ -618,7 +628,7 @@ define(["constants"], function (constants) {
     var counter = 0;
     for (i = 0; i < submitters["none"].length; i++) {
       // Get all shares this party sent: values, squares of values, lin_reg products, questions, and usability.
-      shares = getShares(jiff_instance, submitters["none"][i], ordering);
+      shares = await getShares(jiff_instance, submitters["none"][i], ordering, server_mailbox_hook);
 
       // Sum all things
       sums["all"] = sumAndAccumulate(sums["all"], shares.shares);
@@ -647,7 +657,7 @@ define(["constants"], function (constants) {
     //     var partyID = submitters[cohort][p];
 
     //     // Get all shares this party sent: values, squares of values, questions, and usability.
-    //     shares = getShares(jiff_instance, partyID, ordering);
+    //     shares = await getShares(jiff_instance, partyID, ordering, server_mailbox_hook);
 
     //     // Sum all things
     //     if (ordering.table_meta.cohort_group_by !== ALL) {
@@ -983,7 +993,8 @@ define(["constants"], function (constants) {
     submitters,
     ordering,
     table_template,
-    progressBar
+    progressBar,
+    server_mailbox_hook
   ) {
     updateProgress(progressBar, 0);
 
@@ -995,20 +1006,14 @@ define(["constants"], function (constants) {
     // Get everyone's shares.
     for (var i = 0; i < submitters["all"].length; i++) {
       var partyID = submitters["all"][i];
-      var shares = getShares(jiff_instance, partyID, ordering);
+      var shares = await getShares(jiff_instance, partyID, ordering, server_mailbox_hook);
       all_shares.push(shares.questions);
-
-      // Wait for all shares to be received.
-      var promises = [];
-      for (var share of shares.questions) {
-        if (!share.ready)
-          promises.push(share.value);
-      }
-      await Promise.all(promises);
 
       // Update progress bar.
       updateProgress(progressBar, ((i + 1) / submitters["all"].length) * 0.94);
       console.log("party", i);
+      
+      await new Promise(resolve => { setTimeout(resolve, 5000); });
     }
 
     // Add all shares element wise.
